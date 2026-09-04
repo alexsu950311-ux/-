@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>商業級雲端同步庫存管理系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 pb-12">
+
+  <!-- Header & Navigation -->
+  <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-30">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <i class="fa-solid fa-boxes-stacked text-amber-400 text-2xl"></i>
+        <div>
+          <h1 class="text-lg font-bold leading-tight">雲端庫存管理系統</h1>
+          <p class="text-xs text-slate-400 flex items-center gap-1">
+            <span id="sync-status-dot" class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+            <span id="sync-status-text">已連線至 Google Sheets</span>
+          </p>
+        </div>
+      </div>
+      <nav class="flex space-x-1 mt-2 sm:mt-0">
+        <button id="nav-scan" onclick="switchTab('scan')" class="px-4 py-2 text-sm font-bold rounded-lg bg-amber-500 text-slate-900 shadow">
+          <i class="fa-solid fa-barcode mr-1"></i>掃描操作
+        </button>
+        <button id="nav-overview" onclick="switchTab('overview')" class="px-4 py-2 text-sm font-bold rounded-lg text-slate-300 hover:bg-slate-800">
+          <i class="fa-solid fa-list-check mr-1"></i>庫存總覽
+        </button>
+        <button onclick="fetchInventoryFromCloud()" class="px-3 py-2 text-sm font-bold rounded-lg text-slate-300 hover:bg-slate-800" title="手動重新整理">
+          <i class="fa-solid fa-rotate"></i>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 mt-6">
+
+    <!-- TAB 1: 條碼掃描 / 庫存操作 -->
+    <section id="tab-scan" class="space-y-6">
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5">
+          <label class="text-sm font-bold text-slate-700">操作模式：</label>
+          <div class="flex bg-slate-100 p-1 rounded-lg w-full sm:w-auto">
+            <button id="mode-in" onclick="setMode('in')" class="flex-1 sm:flex-none px-5 py-2 text-sm font-bold rounded-md bg-emerald-600 text-white shadow">
+              <i class="fa-solid fa-circle-plus mr-1"></i>入庫 (新增 +)
+            </button>
+            <button id="mode-out" onclick="setMode('out')" class="flex-1 sm:flex-none px-5 py-2 text-sm font-bold rounded-md text-slate-600 hover:bg-slate-200">
+              <i class="fa-solid fa-circle-minus mr-1"></i>出庫 (扣除 -)
+            </button>
+          </div>
+        </div>
+
+        <form onsubmit="handleBarcodeSubmit(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">條碼輸入 / 條碼槍掃描</label>
+            <div class="flex gap-2">
+              <div class="relative flex-1">
+                <input type="text" id="barcode-input" placeholder="請對準條碼或輸入後按 Enter..." autofocus
+                  class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-lg">
+                <i class="fa-solid fa-barcode absolute left-3 top-4 text-slate-400"></i>
+              </div>
+              <button type="submit" id="btn-submit" class="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-lg transition">
+                確認
+              </button>
+              <button type="button" onclick="toggleCamera()" class="px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition flex items-center gap-1">
+                <i class="fa-solid fa-camera"></i>
+                <span class="hidden sm:inline">鏡頭</span>
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <div id="camera-wrapper" class="hidden mt-4 p-4 bg-slate-900 rounded-lg text-white text-center">
+          <div id="reader" class="w-full max-w-sm mx-auto overflow-hidden rounded-lg"></div>
+          <button onclick="toggleCamera()" class="mt-3 text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-md text-slate-300">關閉鏡頭</button>
+        </div>
+      </div>
+
+      <!-- 最近動態日誌 -->
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+        <h2 class="text-sm font-bold text-slate-700 mb-3 flex items-center">
+          <i class="fa-solid fa-clock-rotate-left mr-2 text-amber-500"></i>即時操作紀錄
+        </h2>
+        <div id="activity-log" class="space-y-2 text-sm text-slate-600 max-h-60 overflow-y-auto">
+          <p class="text-slate-400 italic text-xs">正在載入雲端資料...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: 庫存總覽 -->
+    <section id="tab-overview" class="hidden space-y-6">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <p class="text-xs text-slate-500 font-medium">總品項數量 (SKU)</p>
+          <p id="stat-skus" class="text-2xl font-black text-slate-800 mt-1">0</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <p class="text-xs text-slate-500 font-medium">總庫存件數</p>
+          <p id="stat-total-items" class="text-2xl font-black text-slate-800 mt-1">0</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <p class="text-xs text-slate-500 font-medium">低庫存預警 (&lt; 5)</p>
+          <p id="stat-low-stock" class="text-2xl font-black text-rose-600 mt-1">0</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <p class="text-xs text-slate-500 font-medium">分類數量</p>
+          <p id="stat-categories" class="text-2xl font-black text-slate-800 mt-1">0</p>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 justify-between items-center">
+        <div class="relative flex-1 w-full">
+          <input type="text" id="search-input" oninput="renderOverviewTable()" placeholder="搜尋條碼或品名..."
+            class="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-xs"></i>
+        </div>
+        <select id="filter-category" onchange="renderOverviewTable()" class="w-full sm:w-auto px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <option value="ALL">全部分類</option>
+        </select>
+        <button onclick="exportToCSV()" class="w-full sm:w-auto px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-sm rounded-lg flex items-center justify-center gap-1">
+          <i class="fa-solid fa-file-excel"></i> 匯出 CSV 報表
+        </button>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
+                <th class="p-3">條碼</th>
+                <th class="p-3">商品名稱</th>
+                <th class="p-3">分類</th>
+                <th class="p-3 text-center">庫存數量</th>
+                <th class="p-3 text-right">最後更新時間</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-table-body" class="divide-y divide-slate-100 text-sm"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal: 建立新商品 -->
+  <div id="new-item-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h3 class="font-bold text-lg text-slate-800">首次掃描：建立新商品</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+      <form onsubmit="handleNewItemSubmit(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">商品條碼</label>
+          <input type="text" id="modal-barcode" readonly class="w-full p-2.5 bg-slate-100 border rounded-lg text-slate-600 font-mono text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">商品名稱 <span class="text-rose-500">*</span></label>
+          <input type="text" id="modal-name" required placeholder="例如：黑人超氟牙膏 200g" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">商品分類 <span class="text-rose-500">*</span></label>
+          <select id="modal-category" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm mb-2"></select>
+          <input type="text" id="modal-custom-category" placeholder="或輸入全新分類..." class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">初始數量</label>
+          <input type="number" id="modal-qty" value="1" min="1" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm">
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button type="button" onclick="closeModal()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-sm">取消</button>
+          <button type="submit" id="modal-submit-btn" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-sm">儲存並同步</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // https://script.google.com/macros/s/AKfycbw0QjWAwIAaI-a_n4a0G-SbTpc3zAxjVFfEsGScs2eAXB3Lt68cmJ6V6ndCazejmm4a/exec
+    const API_URL = "https://script.google.com/macros/s/YOUR_APPS_SCRIPT_ID_HERE/exec";
+
+    let inventory = [];
+    let categories = ["口腔清潔用品", "居家清潔", "飲料零食", "個人文具"];
+    let currentMode = 'in';
+    let html5QrcodeScanner = null;
+
+    window.onload = function() {
+      fetchInventoryFromCloud();
+    };
+
+    // 從 Google Sheet 載入資料
+    async function fetchInventoryFromCloud() {
+      updateSyncStatus(false, "同步中...");
+      try {
+        const res = await fetch(API_URL);
+        const data = await res.json();
+        inventory = data.map(item => ({
+          barcode: String(item.barcode),
+          name: item.name,
+          category: item.category,
+          qty: parseInt(item.qty) || 0,
+          updated_at: item.updated_at || ''
+        }));
+        
+        // 抓取不重複的分類
+        const fetchedCats = [...new Set(inventory.map(i => i.category))].filter(Boolean);
+        categories = [...new Set([...categories, ...fetchedCats])];
+
+        updateSyncStatus(true, "已連線至 Google Sheets");
+        renderOverviewTable();
+        addLog("[系統] 已成功從 Google Sheets 載入最新庫存數據", "text-blue-600");
+      } catch (err) {
+        console.error(err);
+        updateSyncStatus(false, "同步失敗 (請檢查網路)");
+        addLog("[錯誤] 無法取得雲端庫存資料", "text-rose-600");
+      }
+    }
+
+    // 發送更新請求至後端 API
+    async function sendCloudUpdate(payload) {
+      updateSyncStatus(false, "寫入雲端中...");
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (result.status === 'success') {
+          updateSyncStatus(true, "已連線至 Google Sheets");
+          return true;
+        } else {
+          alert(`雲端寫入失敗: ${result.message}`);
+          updateSyncStatus(true, "連線異常");
+          return false;
+        }
+      } catch (err) {
+        console.error(err);
+        alert("網路異常，無法同步至雲端！");
+        updateSyncStatus(false, "連線中斷");
+        return false;
+      }
+    }
+
+    function updateSyncStatus(isOk, msg) {
+      document.getElementById('sync-status-dot').className = `w-2 h-2 rounded-full inline-block ${isOk ? 'bg-emerald-500' : 'bg-rose-500 animate-ping'}`;
+      document.getElementById('sync-status-text').innerText = msg;
+    }
+
+    // 處理條碼掃描
+    async function processBarcode(barcode) {
+      if (!barcode) return;
+      const item = inventory.find(i => i.barcode === barcode);
+
+      if (item) {
+        const oldQty = item.qty;
+        let newQty = currentMode === 'in' ? oldQty + 1 : oldQty - 1;
+
+        if (newQty < 0) {
+          alert(`【警示】商品 "${item.name}" 庫存為 0，無法繼續扣減！`);
+          return;
+        }
+
+        // 樂觀更新 (Optimistic UI Update)
+        item.qty = newQty;
+        item.updated_at = new Date().toLocaleString();
+
+        const success = await sendCloudUpdate({
+          action: 'update',
+          barcode: barcode,
+          qty: newQty
+        });
+
+        if (success) {
+          addLog(`[${currentMode === 'in' ? '入庫' : '出庫'}] ${item.name} 變更後數量: ${newQty}`, currentMode === 'in' ? 'text-emerald-600' : 'text-rose-600');
+        } else {
+          item.qty = oldQty; // 復原
+        }
+      } else {
+        if (currentMode === 'out') {
+          alert(`庫存中無此條碼 [${barcode}]，無法辦理扣減！`);
+        } else {
+          openNewItemModal(barcode);
+        }
+      }
+    }
+
+    function handleBarcodeSubmit(e) {
+      e.preventDefault();
+      const input = document.getElementById('barcode-input');
+      const barcode = input.value.trim();
+      processBarcode(barcode);
+      input.value = '';
+      input.focus();
+    }
+
+    function openNewItemModal(barcode) {
+      document.getElementById('modal-barcode').value = barcode;
+      document.getElementById('modal-name').value = '';
+      document.getElementById('modal-custom-category').value = '';
+      document.getElementById('modal-qty').value = 1;
+
+      const select = document.getElementById('modal-category');
+      select.innerHTML = '<option value="">-- 選擇既有分類 --</option>' + categories.map(c => `<option value="${c}">${c}</option>`).join('');
+      document.getElementById('new-item-modal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('new-item-modal').classList.add('hidden');
+    }
+
+    async function handleNewItemSubmit(e) {
+      e.preventDefault();
+      const barcode = document.getElementById('modal-barcode').value;
+      const name = document.getElementById('modal-name').value.trim();
+      const selectCat = document.getElementById('modal-category').value;
+      const customCat = document.getElementById('modal-custom-category').value.trim();
+      const qty = parseInt(document.getElementById('modal-qty').value) || 1;
+      const finalCat = customCat || selectCat || '未分類';
+
+      const success = await sendCloudUpdate({
+        action: 'add',
+        barcode: barcode,
+        name: name,
+        category: finalCat,
+        qty: qty
+      });
+
+      if (success) {
+        if (customCat && !categories.includes(customCat)) categories.push(customCat);
+        inventory.push({ barcode, name, category: finalCat, qty, updated_at: new Date().toLocaleString() });
+        addLog(`[建檔] ${name} (${finalCat}) 初始庫存: ${qty}`, 'text-blue-600');
+        closeModal();
+      }
+    }
+
+    // 匯出 CSV 報表
+    function exportToCSV() {
+      let csvContent = "\uFEFF條碼,商品名稱,商品分類,庫存數量,最後更新時間\n";
+      inventory.forEach(i => {
+        csvContent += `"${i.barcode}","${i.name}","${i.category}",${i.qty},"${i.updated_at}"\n`;
+      });
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `庫存報表_${new Date().toISOString().slice(0,10)}.csv`;
+      link.click();
+    }
+
+    // UI & 視圖控制
+    function switchTab(tab) {
+      document.getElementById('tab-scan').classList.toggle('hidden', tab !== 'scan');
+      document.getElementById('tab-overview').classList.toggle('hidden', tab !== 'overview');
+      document.getElementById('nav-scan').className = tab === 'scan' ? "px-4 py-2 text-sm font-bold rounded-lg bg-amber-500 text-slate-900 shadow" : "px-4 py-2 text-sm font-bold rounded-lg text-slate-300 hover:bg-slate-800";
+      document.getElementById('nav-overview').className = tab === 'overview' ? "px-4 py-2 text-sm font-bold rounded-lg bg-amber-500 text-slate-900 shadow" : "px-4 py-2 text-sm font-bold rounded-lg text-slate-300 hover:bg-slate-800";
+      if (tab === 'overview') renderOverviewTable();
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('mode-in').className = mode === 'in' ? "flex-1 sm:flex-none px-5 py-2 text-sm font-bold rounded-md bg-emerald-600 text-white shadow" : "flex-1 sm:flex-none px-5 py-2 text-sm font-bold rounded-md text-slate-600 hover:bg-slate-200";
+      document.getElementById('mode-out').className = mode === 'out' ? "flex-1 sm:flex-none px-5 py-2 text-sm font-bold rounded-md bg-rose-600 text-white shadow" : "flex-1 sm:flex-none px-5 py-2 text-sm font-bold rounded-md text-slate-600 hover:bg-slate-200";
+    }
+
+    function renderOverviewTable() {
+      document.getElementById('stat-skus').innerText = inventory.length;
+      document.getElementById('stat-total-items').innerText = inventory.reduce((a, b) => a + b.qty, 0);
+      document.getElementById('stat-low-stock').innerText = inventory.filter(i => i.qty < 5).length;
+      document.getElementById('stat-categories').innerText = categories.length;
+
+      const filterCat = document.getElementById('filter-category');
+      const curSelected = filterCat.value;
+      filterCat.innerHTML = '<option value="ALL">全部分類</option>' + categories.map(c => `<option value="${c}" ${c === curSelected ? 'selected' : ''}>${c}</option>`).join('');
+
+      const keyword = document.getElementById('search-input').value.toLowerCase();
+      const selectedCat = filterCat.value;
+
+      const filtered = inventory.filter(i => (i.name.toLowerCase().includes(keyword) || i.barcode.includes(keyword)) && (selectedCat === 'ALL' || i.category === selectedCat));
+
+      const tbody = document.getElementById('inventory-table-body');
+      tbody.innerHTML = filtered.map(item => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="p-3 font-mono text-xs text-slate-500">${item.barcode}</td>
+          <td class="p-3 font-bold text-slate-800">${item.name}</td>
+          <td class="p-3"><span class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs">${item.category}</span></td>
+          <td class="p-3 text-center"><span class="font-bold ${item.qty < 5 ? 'text-rose-600 bg-rose-50 px-2 py-0.5 rounded' : 'text-slate-800'}">${item.qty}</span></td>
+          <td class="p-3 text-right text-xs text-slate-400">${item.updated_at || '-'}</td>
+        </tr>
+      `).join('');
+    }
+
+    function addLog(text, colorClass) {
+      const logBox = document.getElementById('activity-log');
+      const time = new Date().toLocaleTimeString();
+      logBox.insertAdjacentHTML('afterbegin', `<div class="flex justify-between border-b pb-1 text-xs"><span class="${colorClass} font-semibold">${text}</span><span class="text-slate-400">${time}</span></div>`);
+    }
+
+    function toggleCamera() {
+      const wrapper = document.getElementById('camera-wrapper');
+      if (wrapper.classList.contains('hidden')) {
+        wrapper.classList.remove('hidden');
+        html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 150 } });
+        html5QrcodeScanner.render((decodedText) => processBarcode(decodedText), () => {});
+      } else {
+        if (html5QrcodeScanner) html5QrcodeScanner.clear();
+        wrapper.classList.add('hidden');
+      }
+    }
+  </script>
+</body>
+</html>
