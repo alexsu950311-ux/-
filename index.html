@@ -319,29 +319,49 @@
       }
     }
 
-    // 發送資料變更至 Google Sheets
+    // 發送資料變更至 Google Sheets (無 CORS 阻擋加強版)
     async function sendCloudUpdate(payload) {
       updateSyncStatus(false, "寫入雲端中...");
       try {
         const res = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
-        const result = await res.json();
-        if (result.status === 'success') {
-          updateSyncStatus(true, "已連線至 Google Sheets");
-          return true;
-        } else {
-          alert(`寫入失敗: ${result.message}`);
-          return false;
-        }
-      } catch (err) {
-        console.error(err);
-        alert("網路同步失敗！");
-        updateSyncStatus(false, "連線中斷");
+         method: 'POST',
+         headers: {
+           'Content-Type': 'text/plain;charset=utf-8' // 繞過 CORS 預檢請求
+         },
+         body: JSON.stringify(payload)
+      });
+    
+      const result = await res.json();
+      if (result.status === 'success') {
+        updateSyncStatus(true, "已連線至 Google Sheets");
+        return true;
+      } else {
+        alert(`寫入失敗: ${result.message}`);
         return false;
       }
+    } catch (err) {
+      console.error("同步失敗:", err);
+      alert("網路同步失敗，請再試一次！");
+      updateSyncStatus(false, "連線中斷");
+      return false;
+   }   
+  }
+    
+    const result = await res.json();
+    if (result.status === 'success') {
+      updateSyncStatus(true, "已連線至 Google Sheets");
+      return true;
+    } else {
+      alert(`寫入失敗: ${result.message}`);
+      return false;
     }
+  } catch (err) {
+    console.error("同步失敗:", err);
+    alert("網路同步失敗，請再試一次！");
+    updateSyncStatus(false, "連線中斷");
+    return false;
+  }
+}
 
     // 調整數量 (+1 / -1)
     async function adjustQtyDirectly(id, delta) {
