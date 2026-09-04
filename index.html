@@ -1,32 +1,21 @@
-已為您將系統進行以下三大重點升級：
-
-1. **掃描方式改為「上傳相片/圖片」**：移除原本的即時相機，改為可選擇手機相冊中的照片或現場拍照上傳，由系統自動辨識圖片中的條碼/QR Code。
-2. **總覽頁面直覺編輯**：在「庫存總覽」表格的每一列右側直接加入 `+1` 與 `-1` 按鈕，點擊即可即時更新數量並自動同步至 Google Sheets。
-3. **分類快速篩選選單**：總覽頁面上方整合「分類下拉選單」與「關鍵字搜尋列」，方便快速切換區域（如：口腔清潔用品）並定位商品。
-
-以下為升級後的完整 `index.html` 程式碼：
-
-```html
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>雲端庫存管理系統 (圖片辨識版)</title>
+  <title>純照片 AI 比對庫存管理系統</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- 引入圖片條碼/QR Code 辨識 SDK -->
-  <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body class="bg-slate-100 min-h-screen text-slate-800 pb-12">
 
-  <!-- Header & Navigation -->
+  <!-- Header -->
   <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-30">
     <div class="max-w-5xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center">
       <div class="flex items-center space-x-3">
-        <i class="fa-solid fa-boxes-stacked text-amber-400 text-2xl"></i>
+        <i class="fa-solid fa-camera-retro text-amber-400 text-2xl"></i>
         <div>
-          <h1 class="text-lg font-bold leading-tight">雲端庫存管理系統</h1>
+          <h1 class="text-lg font-bold leading-tight">照片辨識庫存管理系統</h1>
           <p class="text-xs text-slate-400 flex items-center gap-1">
             <span id="sync-status-dot" class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
             <span id="sync-status-text">連線狀態確認中...</span>
@@ -35,10 +24,10 @@
       </div>
       <nav class="flex space-x-1 mt-2 sm:mt-0">
         <button id="nav-scan" onclick="switchTab('scan')" class="px-4 py-2 text-sm font-bold rounded-lg bg-amber-500 text-slate-900 shadow">
-          <i class="fa-solid fa-barcode mr-1"></i>圖片掃描
+          <i class="fa-solid fa-camera mr-1"></i>拍照辨識
         </button>
         <button id="nav-overview" onclick="switchTab('overview')" class="px-4 py-2 text-sm font-bold rounded-lg text-slate-300 hover:bg-slate-800">
-          <i class="fa-solid fa-list-check mr-1"></i>庫存總覽
+          <i class="fa-solid fa-boxes-stacked mr-1"></i>庫存總覽
         </button>
         <button onclick="fetchInventoryFromCloud()" class="px-3 py-2 text-sm font-bold rounded-lg text-slate-300 hover:bg-slate-800" title="重新整理">
           <i class="fa-solid fa-rotate"></i>
@@ -49,62 +38,55 @@
 
   <main class="max-w-5xl mx-auto px-4 mt-6">
 
-    <!-- TAB 1: 圖片辨識 / 操作頁面 -->
+    <!-- TAB 1: 照片辨識區 -->
     <section id="tab-scan" class="space-y-6">
       <div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5">
           <label class="text-sm font-bold text-slate-700">操作模式：</label>
           <div class="flex bg-slate-100 p-1 rounded-lg w-full sm:w-auto">
             <button id="mode-in" onclick="setMode('in')" class="flex-1 sm:flex-none px-5 py-2 text-sm font-bold rounded-md bg-emerald-600 text-white shadow">
-              <i class="fa-solid fa-circle-plus mr-1"></i>入庫 (新增 +)
+              <i class="fa-solid fa-circle-plus mr-1"></i>入庫 (+1)
             </button>
             <button id="mode-out" onclick="setMode('out')" class="flex-1 sm:flex-none px-5 py-2 text-sm font-bold rounded-md text-slate-600 hover:bg-slate-200">
-              <i class="fa-solid fa-circle-minus mr-1"></i>出庫 (扣除 -)
+              <i class="fa-solid fa-circle-minus mr-1"></i>出庫 (-1)
             </button>
           </div>
         </div>
 
-        <!-- 選擇圖片辨識區 -->
+        <!-- 拍照 / 選照片區域 -->
         <div class="space-y-4">
-          <div>
-            <label class="block text-xs font-semibold text-slate-500 mb-2">上傳條碼/QR Code 照片進行辨識</label>
-            <div class="flex flex-col sm:flex-row gap-3">
-              <input type="file" id="qr-input-file" accept="image/*" class="hidden" onchange="handleImageScan(event)">
-              <button onclick="document.getElementById('qr-input-file').click()" class="flex-1 py-3 px-4 bg-blue-50 border-2 border-dashed border-blue-300 hover:border-blue-500 rounded-lg text-blue-700 font-bold text-center flex items-center justify-center gap-2 transition">
-                <i class="fa-solid fa-image text-lg"></i>
-                <span>選擇相片 / 拍照上傳</span>
-              </button>
+          <input type="file" id="image-upload-input" accept="image/*" capture="environment" class="hidden" onchange="processImageRecognition(event)">
+          
+          <div onclick="document.getElementById('image-upload-input').click()" 
+               class="cursor-pointer border-2 border-dashed border-amber-400 hover:border-amber-600 bg-amber-50/50 hover:bg-amber-50 rounded-xl p-8 text-center transition flex flex-col items-center justify-center gap-3">
+            <div class="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 text-2xl shadow-inner">
+              <i class="fa-solid fa-camera"></i>
+            </div>
+            <div>
+              <p class="text-base font-bold text-slate-800">點擊此處「現場拍照」或「選擇照片」</p>
+              <p class="text-xs text-slate-500 mt-1">系統將自動分析影像特徵，並與歷史照片進行比對</p>
             </div>
           </div>
 
-          <div class="relative flex items-center justify-center my-2">
-            <div class="border-t border-slate-200 w-full"></div>
-            <span class="bg-white px-3 text-xs text-slate-400 font-semibold absolute">或手動輸入</span>
-          </div>
-
-          <!-- 手動輸入條碼 -->
-          <form onsubmit="handleBarcodeSubmit(event)" class="flex gap-2">
-            <div class="relative flex-1">
-              <input type="text" id="barcode-input" placeholder="直接輸入條碼號碼..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm">
-              <i class="fa-solid fa-keyboard absolute left-3 top-3.5 text-slate-400 text-xs"></i>
+          <!-- 圖片比對狀態區 -->
+          <div id="recognition-preview" class="hidden bg-slate-50 p-4 rounded-lg border border-slate-200 flex flex-col sm:flex-row items-center gap-4">
+            <img id="preview-img" class="w-24 h-24 object-cover rounded-lg border border-slate-300 shadow-sm" src="" alt="預覽">
+            <div class="flex-1 text-center sm:text-left">
+              <span id="recognize-badge" class="px-2.5 py-1 text-xs font-bold rounded-full bg-blue-100 text-blue-700">正在分析圖像特徵...</span>
+              <p id="recognize-result-title" class="font-bold text-slate-800 mt-2">分析中...</p>
+              <p id="recognize-result-detail" class="text-xs text-slate-500 mt-1">請稍候，正在比對資料庫庫存照片...</p>
             </div>
-            <button type="submit" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-lg text-sm transition">
-              送出
-            </button>
-          </form>
+          </div>
         </div>
-
-        <!-- 用於隱藏解析的元素 -->
-        <div id="file-scan-reader" class="hidden"></div>
       </div>
 
-      <!-- 操作記錄 -->
+      <!-- 操作記錄動態 -->
       <div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
         <h2 class="text-sm font-bold text-slate-700 mb-3 flex items-center">
-          <i class="fa-solid fa-clock-rotate-left mr-2 text-amber-500"></i>即時操作動態
+          <i class="fa-solid fa-clock-rotate-left mr-2 text-amber-500"></i>即時辨識與變更記錄
         </h2>
         <div id="activity-log" class="space-y-2 text-sm text-slate-600 max-h-60 overflow-y-auto">
-          <p class="text-slate-400 italic text-xs">載入中...</p>
+          <p class="text-slate-400 italic text-xs">尚無操作記錄...</p>
         </div>
       </div>
     </section>
@@ -113,7 +95,7 @@
     <section id="tab-overview" class="hidden space-y-6">
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <p class="text-xs text-slate-500 font-medium">總品項數量 (SKU)</p>
+          <p class="text-xs text-slate-500 font-medium">總品項 (SKU)</p>
           <p id="stat-skus" class="text-2xl font-black text-slate-800 mt-1">0</p>
         </div>
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -133,11 +115,10 @@
       <!-- 篩選列 -->
       <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 justify-between items-center">
         <div class="relative flex-1 w-full">
-          <input type="text" id="search-input" oninput="renderOverviewTable()" placeholder="搜尋條碼或品名..."
+          <input type="text" id="search-input" oninput="renderOverviewTable()" placeholder="搜尋商品名稱..."
             class="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-xs"></i>
         </div>
-        <!-- 分類下拉選單 -->
         <select id="filter-category" onchange="renderOverviewTable()" class="w-full sm:w-auto px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium">
           <option value="ALL">全部分類</option>
         </select>
@@ -149,7 +130,7 @@
           <table class="w-full text-left border-collapse">
             <thead>
               <tr class="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
-                <th class="p-3">條碼</th>
+                <th class="p-3">縮圖</th>
                 <th class="p-3">商品名稱</th>
                 <th class="p-3">分類</th>
                 <th class="p-3 text-center">庫存數量</th>
@@ -164,50 +145,150 @@
 
   </main>
 
-  <!-- Modal: 新增商品 -->
+  <!-- Modal: 新增照片商品 -->
   <div id="new-item-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
       <div class="flex justify-between items-center border-b pb-3">
-        <h3 class="font-bold text-lg text-slate-800">首次掃描：建立新商品</h3>
+        <h3 class="font-bold text-lg text-slate-800">辨識為新商品：建立檔案</h3>
         <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
       <form onsubmit="handleNewItemSubmit(event)" class="space-y-4">
-        <div>
-          <label class="block text-xs font-bold text-slate-500 mb-1">商品條碼</label>
-          <input type="text" id="modal-barcode" readonly class="w-full p-2.5 bg-slate-100 border rounded-lg text-slate-600 font-mono text-sm">
+        <div class="flex items-center gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+          <img id="modal-img-preview" class="w-16 h-16 object-cover rounded-md border" src="">
+          <p class="text-xs text-slate-500">將這張照片的特徵指紋綁定為此商品的標準外觀，以便日後自動辨識。</p>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-500 mb-1">商品名稱 <span class="text-rose-500">*</span></label>
-          <input type="text" id="modal-name" required placeholder="例如：黑人牙膏 200g" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm">
+          <input type="text" id="modal-name" required placeholder="例如：靠得住衛生棉 / 可口可樂 600ml" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm">
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-500 mb-1">商品分類 <span class="text-rose-500">*</span></label>
           <select id="modal-category" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm mb-2"></select>
-          <input type="text" id="modal-custom-category" placeholder="或輸入全新分類..." class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm">
+          <input type="text" id="modal-custom-category" placeholder="或輸入新分類名稱..." class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm">
         </div>
         <div>
-          <label class="block text-xs font-bold text-slate-500 mb-1">初始數量</label>
+          <label class="block text-xs font-bold text-slate-500 mb-1">初始庫存數量</label>
           <input type="number" id="modal-qty" value="1" min="1" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-amber-500 text-sm">
         </div>
         <div class="flex gap-2 pt-2">
           <button type="button" onclick="closeModal()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-sm">取消</button>
-          <button type="submit" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-sm">儲存並同步</button>
+          <button type="submit" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-sm">建檔並同步</button>
         </div>
       </form>
     </div>
   </div>
 
   <script>
-    // ⚠️ 請務必填入您的 Google Apps Script Web App API 網址
+    // ⚠️ 填入您的 Google Apps Script Web App URL
     const API_URL = "https://script.google.com/macros/s/AKfycbw0QjWAwIAaI-a_n4a0G-SbTpc3zAxjVFfEsGScs2eAXB3Lt68cmJ6V6ndCazejmm4a/exec";
 
     let inventory = [];
-    let categories = ["口腔清潔用品", "居家清潔", "飲料零食", "個人文具"];
+    let categories = ["口腔清潔用品", "個人衛生用品", "飲料零食", "清潔用品"];
     let currentMode = 'in';
+    let tempImageHash = "";
+    let tempImageDataUrl = "";
 
     window.onload = function() {
       fetchInventoryFromCloud();
     };
+
+    // 1. 影像特徵指紋算法 (Perceptual Hash) - 在前端快速計算照片特徵
+    function generateImageHash(imgElement) {
+      return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 8;
+        canvas.height = 8;
+        ctx.drawImage(imgElement, 0, 0, 8, 8);
+        const imgData = ctx.getImageData(0, 0, 8, 8).data;
+
+        let grays = [];
+        for (let i = 0; i < imgData.length; i += 4) {
+          const avg = 0.299 * imgData[i] + 0.587 * imgData[i+1] + 0.114 * imgData[i+2];
+          grays.push(avg);
+        }
+
+        const mean = grays.reduce((a, b) => a + b, 0) / grays.length;
+        let hash = "";
+        grays.forEach(val => { hash += val >= mean ? "1" : "0"; });
+        resolve(hash);
+      });
+    }
+
+    // 計算兩個照片特徵指紋的相似度 (0% - 100%)
+    function calculateHashSimilarity(hash1, hash2) {
+      if (!hash1 || !hash2 || hash1.length !== hash2.length) return 0;
+      let matchCount = 0;
+      for (let i = 0; i < hash1.length; i++) {
+        if (hash1[i] === hash2[i]) matchCount++;
+      }
+      return (matchCount / hash1.length) * 100;
+    }
+
+    // 2. 處理照片辨識流程
+    async function processImageRecognition(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const previewContainer = document.getElementById('recognition-preview');
+      const previewImg = document.getElementById('preview-img');
+      const badge = document.getElementById('recognize-badge');
+      const title = document.getElementById('recognize-result-title');
+      const detail = document.getElementById('recognize-result-detail');
+
+      previewContainer.classList.remove('hidden');
+      badge.className = "px-2.5 py-1 text-xs font-bold rounded-full bg-amber-100 text-amber-700";
+      badge.innerText = "特徵分析與比對中...";
+      title.innerText = "正在分析影像...";
+      detail.innerText = "連線庫存資料庫進行圖像比對...";
+
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        tempImageDataUrl = e.target.result;
+        previewImg.src = tempImageDataUrl;
+
+        const img = new Image();
+        img.src = tempImageDataUrl;
+        img.onload = async function() {
+          // 生成此照片的特徵 Hash
+          tempImageHash = await generateImageHash(img);
+
+          // 與庫存照片進行相似度比對
+          let bestMatch = null;
+          let highestSimilarity = 0;
+
+          inventory.forEach(item => {
+            if (item.imageHash) {
+              const similarity = calculateHashSimilarity(tempImageHash, item.imageHash);
+              if (similarity > highestSimilarity) {
+                highestSimilarity = similarity;
+                bestMatch = item;
+              }
+            }
+          });
+
+          // 判斷相似度門檻 (例如設定 80% 判定為同一商品)
+          if (bestMatch && highestSimilarity >= 78) {
+            badge.className = "px-2.5 py-1 text-xs font-bold rounded-full bg-emerald-100 text-emerald-700";
+            badge.innerText = `比對成功 (相似度: ${Math.round(highestSimilarity)}%)`;
+            title.innerText = `相符商品：${bestMatch.name}`;
+            detail.innerText = `系統已自動執行 ${currentMode === 'in' ? '入庫 +1' : '出庫 -1'} 操作。`;
+
+            // 執行數量變更
+            adjustQtyDirectly(bestMatch.id, currentMode === 'in' ? 1 : -1);
+          } else {
+            // 相似度低，判定為新商品
+            badge.className = "px-2.5 py-1 text-xs font-bold rounded-full bg-purple-100 text-purple-700";
+            badge.innerText = "未在庫存中找到匹配照片";
+            title.innerText = "判斷為新商品";
+            detail.innerText = "準備進行新商品建檔...";
+
+            setTimeout(() => { openNewItemModal(); }, 800);
+          }
+        };
+      };
+      reader.readAsDataURL(file);
+    }
 
     // 從 Google Sheets 載入資料
     async function fetchInventoryFromCloud() {
@@ -216,10 +297,12 @@
         const res = await fetch(API_URL);
         const data = await res.json();
         inventory = data.map(item => ({
-          barcode: String(item.barcode),
+          id: String(item.id || item.barcode || Date.now()),
           name: item.name,
           category: item.category,
           qty: parseInt(item.qty) || 0,
+          imageHash: item.imageHash || '',
+          imageDataUrl: item.imageDataUrl || '',
           updated_at: item.updated_at || ''
         }));
         
@@ -228,15 +311,15 @@
 
         updateSyncStatus(true, "已連線至 Google Sheets");
         renderOverviewTable();
-        addLog("[系統] 已成功載入雲端最新庫存數據", "text-blue-600");
+        addLog("[系統] 已同步最新的庫存與照片特徵資料", "text-blue-600");
       } catch (err) {
         console.error(err);
-        updateSyncStatus(false, "連線失敗 (請檢查權限或 API 網址)");
-        addLog("[錯誤] 無法取得雲端庫存資料", "text-rose-600");
+        updateSyncStatus(false, "連線失敗 (請確認 API 部署)");
+        addLog("[錯誤] 無法取得庫存資料", "text-rose-600");
       }
     }
 
-    // 發送資料變更至後端 API
+    // 發送資料變更至 Google Sheets
     async function sendCloudUpdate(payload) {
       updateSyncStatus(false, "寫入雲端中...");
       try {
@@ -250,76 +333,19 @@
           return true;
         } else {
           alert(`寫入失敗: ${result.message}`);
-          updateSyncStatus(true, "連線異常");
           return false;
         }
       } catch (err) {
         console.error(err);
-        alert("網路異常，同步失敗！");
+        alert("網路同步失敗！");
         updateSyncStatus(false, "連線中斷");
         return false;
       }
     }
 
-    // 處理相片辨識掃描
-    function handleImageScan(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const html5QrCode = new Html5Qrcode("file-scan-reader");
-      html5QrCode.scanFile(file, true)
-        .then(decodedText => {
-          addLog(`[相片辨識成功] 辨識條碼: ${decodedText}`, "text-indigo-600");
-          processBarcode(decodedText);
-        })
-        .catch(err => {
-          alert("無法從相片中辨識出有效的條碼/QR Code，請確保照片清晰無遮蔽。");
-          addLog(`[辨識失敗] 無法辨識照片中的條碼`, "text-rose-600");
-        });
-    }
-
-    // 處理條碼邏輯
-    async function processBarcode(barcode) {
-      if (!barcode) return;
-      const item = inventory.find(i => i.barcode === barcode);
-
-      if (item) {
-        const oldQty = item.qty;
-        let newQty = currentMode === 'in' ? oldQty + 1 : oldQty - 1;
-
-        if (newQty < 0) {
-          alert(`【警示】商品 "${item.name}" 庫存已為 0，無法繼續扣減！`);
-          return;
-        }
-
-        item.qty = newQty;
-        item.updated_at = new Date().toLocaleString();
-        renderOverviewTable();
-
-        const success = await sendCloudUpdate({
-          action: 'update',
-          barcode: barcode,
-          qty: newQty
-        });
-
-        if (success) {
-          addLog(`[${currentMode === 'in' ? '入庫' : '出庫'}] ${item.name} 變更後數量: ${newQty}`, currentMode === 'in' ? 'text-emerald-600' : 'text-rose-600');
-        } else {
-          item.qty = oldQty;
-          renderOverviewTable();
-        }
-      } else {
-        if (currentMode === 'out') {
-          alert(`庫存中無此條碼 [${barcode}]，無法辦理扣減！`);
-        } else {
-          openNewItemModal(barcode);
-        }
-      }
-    }
-
-    // 總覽頁面直覺直接新增/扣減
-    async function adjustQtyDirectly(barcode, delta) {
-      const item = inventory.find(i => i.barcode === barcode);
+    // 調整數量 (+1 / -1)
+    async function adjustQtyDirectly(id, delta) {
+      const item = inventory.find(i => i.id === id);
       if (!item) return;
 
       const newQty = item.qty + delta;
@@ -335,34 +361,26 @@
 
       const success = await sendCloudUpdate({
         action: 'update',
-        barcode: barcode,
+        id: id,
         qty: newQty
       });
 
       if (success) {
-        addLog(`[快捷變更] ${item.name} 數量調整為: ${newQty}`, delta > 0 ? 'text-emerald-600' : 'text-rose-600');
+        addLog(`[${delta > 0 ? '入庫' : '出庫'}] ${item.name} 變更後庫存為: ${newQty}`, delta > 0 ? 'text-emerald-600' : 'text-rose-600');
       } else {
         item.qty = oldQty;
         renderOverviewTable();
       }
     }
 
-    function handleBarcodeSubmit(e) {
-      e.preventDefault();
-      const input = document.getElementById('barcode-input');
-      const barcode = input.value.trim();
-      processBarcode(barcode);
-      input.value = '';
-    }
-
-    function openNewItemModal(barcode) {
-      document.getElementById('modal-barcode').value = barcode;
+    function openNewItemModal() {
+      document.getElementById('modal-img-preview').src = tempImageDataUrl;
       document.getElementById('modal-name').value = '';
       document.getElementById('modal-custom-category').value = '';
       document.getElementById('modal-qty').value = 1;
 
       const select = document.getElementById('modal-category');
-      select.innerHTML = '<option value="">-- 選擇既有分類 --</option>' + categories.map(c => `<option value="${c}">${c}</option>`).join('');
+      select.innerHTML = '<option value="">-- 選擇已有分類 --</option>' + categories.map(c => `<option value="${c}">${c}</option>`).join('');
       document.getElementById('new-item-modal').classList.remove('hidden');
     }
 
@@ -372,7 +390,7 @@
 
     async function handleNewItemSubmit(e) {
       e.preventDefault();
-      const barcode = document.getElementById('modal-barcode').value;
+      const id = "ITEM_" + Date.now();
       const name = document.getElementById('modal-name').value.trim();
       const selectCat = document.getElementById('modal-category').value;
       const customCat = document.getElementById('modal-custom-category').value.trim();
@@ -381,22 +399,24 @@
 
       const success = await sendCloudUpdate({
         action: 'add',
-        barcode: barcode,
+        id: id,
         name: name,
         category: finalCat,
-        qty: qty
+        qty: qty,
+        imageHash: tempImageHash,
+        imageDataUrl: tempImageDataUrl
       });
 
       if (success) {
         if (customCat && !categories.includes(customCat)) categories.push(customCat);
-        inventory.push({ barcode, name, category: finalCat, qty, updated_at: new Date().toLocaleString() });
-        addLog(`[建檔成功] ${name} (${finalCat}) 初始庫存: ${qty}`, 'text-blue-600');
+        inventory.push({ id, name, category: finalCat, qty, imageHash: tempImageHash, imageDataUrl: tempImageDataUrl, updated_at: new Date().toLocaleString() });
+        addLog(`[新商品建檔] ${name} (${finalCat}) 初始庫存: ${qty}`, 'text-blue-600');
         renderOverviewTable();
         closeModal();
       }
     }
 
-    // 渲染總覽表格
+    // 渲染庫存總覽
     function renderOverviewTable() {
       document.getElementById('stat-skus').innerText = inventory.length;
       document.getElementById('stat-total-items').innerText = inventory.reduce((a, b) => a + b.qty, 0);
@@ -410,25 +430,27 @@
       const keyword = document.getElementById('search-input').value.toLowerCase();
       const selectedCat = filterCat.value;
 
-      const filtered = inventory.filter(i => (i.name.toLowerCase().includes(keyword) || i.barcode.includes(keyword)) && (selectedCat === 'ALL' || i.category === selectedCat));
+      const filtered = inventory.filter(i => i.name.toLowerCase().includes(keyword) && (selectedCat === 'ALL' || i.category === selectedCat));
 
       const tbody = document.getElementById('inventory-table-body');
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">尚無符合條件的商品數據</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">尚無庫存數據，請點擊上方拍照新增。</td></tr>`;
         return;
       }
 
       tbody.innerHTML = filtered.map(item => `
         <tr class="hover:bg-slate-50 transition">
-          <td class="p-3 font-mono text-xs text-slate-500">${item.barcode}</td>
+          <td class="p-3">
+            ${item.imageDataUrl ? `<img src="${item.imageDataUrl}" class="w-10 h-10 object-cover rounded border">` : `<div class="w-10 h-10 bg-slate-100 rounded flex items-center justify-center text-slate-400 text-xs"><i class="fa-solid fa-image"></i></div>`}
+          </td>
           <td class="p-3 font-bold text-slate-800">${item.name}</td>
           <td class="p-3"><span class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-semibold">${item.category}</span></td>
           <td class="p-3 text-center">
             <span class="font-bold ${item.qty < 5 ? 'text-rose-600 bg-rose-50 px-2 py-0.5 rounded' : 'text-slate-800'}">${item.qty}</span>
           </td>
           <td class="p-3 text-right space-x-1">
-            <button onclick="adjustQtyDirectly('${item.barcode}', 1)" class="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold text-xs rounded transition">+1</button>
-            <button onclick="adjustQtyDirectly('${item.barcode}', -1)" class="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs rounded transition">-1</button>
+            <button onclick="adjustQtyDirectly('${item.id}', 1)" class="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold text-xs rounded transition">+1</button>
+            <button onclick="adjustQtyDirectly('${item.id}', -1)" class="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs rounded transition">-1</button>
           </td>
         </tr>
       `).join('');
@@ -461,5 +483,3 @@
   </script>
 </body>
 </html>
-
-```
